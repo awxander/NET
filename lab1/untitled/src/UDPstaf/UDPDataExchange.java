@@ -18,30 +18,27 @@ public class UDPDataExchange {
 
     public static void main(String[] args) {
         int port = 6789;
-        try (/*MulticastSocket sendSocket = new MulticastSocket(6789);*/
-             MulticastSocket receiveSocket = new MulticastSocket(port);) {
-            InetAddress inetAddress = InetAddress.getByName("230.0.0.2");
-            if(!inetAddress.isMulticastAddress()){
+        try (MulticastSocket sendSocket = new MulticastSocket(port);
+             MulticastSocket receiveSocket = new MulticastSocket();) {
+            InetAddress group = InetAddress.getByName(args[0]);
+            if (!group.isMulticastAddress()) {
                 System.out.println("not a multicast address");
                 System.exit(1);
             }
 
+            receiveSocket.joinGroup(group);
 
-            NetworkInterface netInterface = NetworkInterface.getByInetAddress(inetAddress);
-            receiveSocket.joinGroup(new InetSocketAddress(inetAddress,port ), netInterface);
-//            receiveSocket.joinGroup(inetSocketAddress, nif);
+            new SendThread(sendSocket, group).start();
 
-//            new SendThread(sendSocket, group).start();
+            while (true) {
+                byte[] buf = new byte[1000];
+                DatagramPacket receivedPacket = new DatagramPacket(buf, buf.length);
+                receiveSocket.receive(receivedPacket);
+                InetAddress receivedPacketAddress = receivedPacket.getAddress();
 
-            while(true){
-            byte[] buf = new byte[1000];
-            DatagramPacket receivedPacket = new DatagramPacket(buf, buf.length);
-            receiveSocket.receive(receivedPacket);
-            InetAddress receivedPacketAddress = receivedPacket.getAddress();
                 System.out.println(Arrays.toString(buf));
             }
-
-        }catch (IOException e){
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
