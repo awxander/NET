@@ -3,11 +3,13 @@ import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
 
-public class SendThread extends Thread{
+import static java.lang.Thread.sleep;
 
-    MulticastSocket multicastSocket;
-    InetAddress inetAddress;
-    int port;
+public class SendThread implements Runnable {
+
+    private final MulticastSocket multicastSocket;
+    private final int port;
+    private final InetAddress inetAddress;
 
     public SendThread(MulticastSocket multicastSocket, InetAddress inetAddress, int port) {
         this.multicastSocket = multicastSocket;
@@ -18,7 +20,7 @@ public class SendThread extends Thread{
     @Override
     public void run() {
 
-        while(true){
+        while (true) {
             String msg = "";
             DatagramPacket packet = new DatagramPacket(msg.getBytes(), msg.length(),
                     inetAddress, port);
@@ -28,15 +30,13 @@ public class SendThread extends Thread{
                 e.printStackTrace();
                 break;
             }
-
-            synchronized (Thread.currentThread()){
-                try {
-                    wait(500);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                    break;
-                }
+            try {
+                sleep(500);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+                throw new RuntimeException(e);
             }
         }
     }
 }
+
