@@ -54,22 +54,25 @@ public class UDPDataExchange {
             while (true) {
                 byte[] buf = new byte[512];
                 DatagramPacket receivedPacket = new DatagramPacket(buf, buf.length);
-                receiveSocket.receive(receivedPacket);
-                InetAddress receivedPacketAddress = receivedPacket.getAddress();
-                int packetPort = receivedPacket.getPort();
-                String key = receivedPacketAddress + "; " + packetPort;
-                if(!addressMap.containsKey(key)){
-                    System.out.println("new user added, ip and port are: " + key);
-                    printAliveAddresses();
+                try {
+                    receiveSocket.receive(receivedPacket);
+                    InetAddress receivedPacketAddress = receivedPacket.getAddress();
+                    int packetPort = receivedPacket.getPort();
+                    String key = receivedPacketAddress + "; " + packetPort;
+                    if(!addressMap.containsKey(key)){
+                        System.out.println("new user added, ip and port are: " + key);
+                        addressMap.put(key, System.currentTimeMillis());
+                        printAliveAddresses();
+                    }else{
+                        addressMap.put(key, System.currentTimeMillis());
+                    }
+                } catch (IOException e) {
                 }
-                addressMap.put(key, System.currentTimeMillis());
                 removeRottenAddresses();
 
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-
     }
 }
