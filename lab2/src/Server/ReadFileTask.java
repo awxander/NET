@@ -50,7 +50,7 @@ public class ReadFileTask implements Runnable {
             }
 
             String strFilePath = UPLOAD_DIR + "/" + fileName;
-            new Thread(() -> {
+            Thread countSpeedThread = new Thread(() -> {
                 while (!clientSocket.isClosed()) {
                     lastGapReadBytesAmount = 0L;
                     try {
@@ -59,7 +59,7 @@ public class ReadFileTask implements Runnable {
                         throw new RuntimeException(e);
                     }
                     readSpeed = lastGapReadBytesAmount / (TIME_GAP_MILLIS / 1000);
-                    if(readSpeed == 0) {
+                    if (readSpeed == 0) {
                         try {
                             clientSocket.close();
                         } catch (IOException e) {
@@ -70,7 +70,8 @@ public class ReadFileTask implements Runnable {
                     }
                     System.out.println(readSpeed);
                 }
-            }).start();
+            });
+            countSpeedThread.start();
 
             try (FileWriter myWriter = new FileWriter(strFilePath);) {
                 while (!clientSocket.isClosed() && readBytesAmount < fileSize) {
@@ -89,7 +90,12 @@ public class ReadFileTask implements Runnable {
                 outputStream.writeUTF("yea, we cool");
                 logger.info("file successfully read ");
             }
-
+            try {
+                countSpeedThread.join();
+            } catch (InterruptedException e) {
+                logger.log(Level.SEVERE, "failed join countSpeedThread", e);
+                throw new RuntimeException(e);
+            }
         } catch (IOException e) {
             logger.log(Level.SEVERE, "failed reading file", e);
             throw new RuntimeException(e);
