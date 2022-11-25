@@ -13,7 +13,9 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Scanner;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import ru.nsu.fit.tsibin.Exceptions.IncorrectResponseException;
+import ru.nsu.fit.tsibin.Exceptions.LocationNotFoundException;
 
 import static java.lang.System.in;
 
@@ -49,16 +51,21 @@ public class APIWorker {
     private String buildOpenWeatherURI(BigDecimal lat, BigDecimal lng) {
         String strLng = lng.setScale(2, RoundingMode.DOWN).toString();
         String strLat = lat.setScale(2, RoundingMode.DOWN).toString();
-        return "https://openweathermap.org/data/2.5/weather?lat=" + strLat + "&lon="
-                + strLng + "&appid=" + OPENWEATHER_PKEY;
 
+        return "http://api.openweathermap.org/data/2.5/weather?lat=" + strLat + "&lon="
+                + strLng + "&appid=" + OPENWEATHER_PKEY;
     }
 
 
-    public Location getUserChooseLocation(List<Location> locationsList) throws NullPointerException {
+    public Location getUserChooseLocation(List<Location> locationsList) throws NullPointerException, LocationNotFoundException {
         if (locationsList == null) {
             throw new NullPointerException("empty locations list");
         }
+
+        if(locationsList.size() == 0){
+            throw new LocationNotFoundException();
+        }
+
         System.out.println("choose location:");
         for (int i = 0; i < locationsList.size(); i++) {
             System.out.println((i + 1) + ") " + locationsList.get(i).data());
@@ -89,7 +96,7 @@ public class APIWorker {
         return locationsList.get(locationNum - 1);// -1 so as our list start with 0
     }
 
-    private boolean isOk(int code) {
+    private boolean isOk(int code) {//check first digit in response code number
         if (code / 100 != SUCCESS_ANSWER_CODE_BEGIN)
             return false;
         return true;
@@ -115,13 +122,7 @@ public class APIWorker {
             }
 
 
-        } catch (URISyntaxException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
-        } catch (IOException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
-        } catch (InterruptedException e) {
+        } catch (URISyntaxException | IOException | InterruptedException | LocationNotFoundException e) {
             e.printStackTrace();
             throw new RuntimeException(e);
         }
@@ -136,11 +137,12 @@ public class APIWorker {
                     .GET().build();
 
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
             if (isOk(response.statusCode())) {
 
                 String jsonStr = response.body();
                 WeatherData currentWeather = JSONParser.getWeatherData(jsonStr);
-
+                currentWeather.printWeatherData(System.out);
             } else {
                 throw new IncorrectResponseException(response.statusCode());
             }
@@ -149,20 +151,17 @@ public class APIWorker {
             e.printStackTrace();
             throw new RuntimeException(e);
         }
-
-
     }
 
-    public void start() {
+
+    public void start() throws ExecutionException, InterruptedException {
         Scanner consoleReader = new Scanner(in);
         System.out.println("enter location name:");
         String locationName = consoleReader.next();
         System.out.println("processing...");
-        CompletableFuture<Location> future = new CompletableFuture<>();
-        future.thenApply(findLocation(locationName))//че тут бля делать, чекнуть
-        Location location = findLocation(locationName);
-        showWeather(location);
 
+        CompletableFuture<Location> future = CompletableFuture.supplyAsync(() -> findLocation(locationName));
 
+        showWeather(future.get());
     }
 }
