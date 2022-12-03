@@ -1,4 +1,4 @@
-package ru.nsu.fit.tsibin;
+package ru.nsu.fit.tsibin.entities;
 
 import java.io.OutputStream;
 import java.io.PrintStream;

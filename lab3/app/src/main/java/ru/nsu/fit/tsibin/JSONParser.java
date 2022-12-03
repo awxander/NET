@@ -5,17 +5,22 @@ import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import ru.nsu.fit.tsibin.Exceptions.IncorrectResponseException;
+import ru.nsu.fit.tsibin.entities.Location;
+import ru.nsu.fit.tsibin.entities.Place;
+import ru.nsu.fit.tsibin.entities.WeatherData;
 
 public class JSONParser {
+
+    private static final String EMPTY_STR = "";
 
     private static String getDataInStr(JSONObject jsonObject, String arg) {
         if (jsonObject.has(arg)) {
             String name = jsonObject.getString(arg);
             return arg + ": " + name + "; ";
         }
-        return null;
+        return EMPTY_STR;
     }
+
 
     public static List<Location> getLocations(String respBody) {
 
@@ -23,9 +28,9 @@ public class JSONParser {
         JSONObject jsonObject = new JSONObject(respBody);
 
 
-        JSONArray arr = jsonObject.getJSONArray("hits"); // notice that `"posts": [...]`
+        JSONArray arr = jsonObject.getJSONArray("hits");
         for (int i = 0; i < arr.length(); i++) {
-            String locationData = "";
+            String locationData = EMPTY_STR;
 
             JSONObject obj = arr.getJSONObject(i);
             locationData += getDataInStr(obj, "name");
@@ -42,6 +47,30 @@ public class JSONParser {
             System.out.println("latitude: " + latitude + ", longitude: " + longitude);
         }
         return locationsList;
+    }
+
+    private static Place getPlace(JSONObject jsonPlace) {
+        Place place = new Place();
+        if (jsonPlace.has("name"))      place.setName(jsonPlace.getString("name"));
+        if (jsonPlace.has("xid"))       place.setXid(jsonPlace.getString("xid"));
+        if (jsonPlace.has("kinds"))     place.setCategory(jsonPlace.getString("kinds"));
+
+        return place;
+    }
+
+    public static void setPlaceDescription(Place place ,String respBody){
+        JSONObject obj = new JSONObject(respBody);
+        if(obj.has("descr")) place.setDescription(obj.getString("descr"));
+    }
+
+    public static List<Place> getPlaces(String respBody) {
+        JSONArray jsonArray = new JSONArray(respBody);
+        List<Place> placesData = new ArrayList<>();
+        for (int i = 0; i < jsonArray.length(); i++) {
+            JSONObject jsonPlaceData = jsonArray.getJSONObject(i);
+            placesData.add(getPlace(jsonPlaceData));
+        }
+        return placesData;
     }
 
     public static WeatherData getWeatherData(String respBody) {
@@ -67,20 +96,18 @@ public class JSONParser {
 
         if (jsonObject.has("main")) {
             JSONObject mainBlock = jsonObject.getJSONObject("main");
-            if(mainBlock.has("temp"))   temp = mainBlock.getFloat("temp");
-            if(mainBlock.has("feels_like"))   feelsLikeTemp = mainBlock.getFloat("feels_like");
-            if(mainBlock.has("temp_min"))   minTemp = mainBlock.getFloat("temp_min");
-            if(mainBlock.has("temp_max"))   maxTemp = mainBlock.getFloat("temp_max");
-            if(mainBlock.has("pressure"))   pressure = mainBlock.getInt("pressure");
+            if (mainBlock.has("temp")) temp = mainBlock.getFloat("temp");
+            if (mainBlock.has("feels_like")) feelsLikeTemp = mainBlock.getFloat("feels_like");
+            if (mainBlock.has("temp_min")) minTemp = mainBlock.getFloat("temp_min");
+            if (mainBlock.has("temp_max")) maxTemp = mainBlock.getFloat("temp_max");
+            if (mainBlock.has("pressure")) pressure = mainBlock.getInt("pressure");
         }
-        if(jsonObject.has("wind")){//get wind speed
-            if(jsonObject.getJSONObject("wind").has("speed"))
+        if (jsonObject.has("wind")) {//get wind speed
+            if (jsonObject.getJSONObject("wind").has("speed"))
                 windSpeed = jsonObject.getJSONObject("wind").getFloat("speed");
         }
 
-
-
-        return new WeatherData(temp,minTemp,maxTemp,feelsLikeTemp,pressure,windSpeed,weatherDescription);
+        return new WeatherData(temp, minTemp, maxTemp, feelsLikeTemp, pressure, windSpeed, weatherDescription);
     }
 
 }

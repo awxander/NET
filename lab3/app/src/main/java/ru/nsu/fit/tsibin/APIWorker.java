@@ -1,5 +1,6 @@
 package ru.nsu.fit.tsibin;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -14,15 +15,23 @@ import java.util.Properties;
 import java.util.Scanner;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import ru.nsu.fit.tsibin.Exceptions.IncorrectResponseException;
-import ru.nsu.fit.tsibin.Exceptions.LocationNotFoundException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import ru.nsu.fit.tsibin.entities.Place;
+import ru.nsu.fit.tsibin.exceptions.IncorrectResponseException;
+import ru.nsu.fit.tsibin.exceptions.LocationNotFoundException;
+import ru.nsu.fit.tsibin.entities.Location;
+import ru.nsu.fit.tsibin.entities.WeatherData;
 
 import static java.lang.System.in;
+import static java.lang.System.out;
 
 public class APIWorker {
 
     private static final Properties properties = new Properties();
-    private static final String CONFIG_PATH = "src/resources/config.properties";
+    private static final String CONFIG_PATH = "src/main/resources/config.properties";
 
     static {
         try {
@@ -34,9 +43,13 @@ public class APIWorker {
 
     }
 
+    private final int RADIUS = 1000;
+
     private final int SUCCESS_ANSWER_CODE_BEGIN = 2;
     private final String GEOCODING_PKEY = properties.getProperty("geocoding_pkey");
     private final String OPENWEATHER_PKEY = properties.getProperty("openweather_pkey");
+
+    private final String OPENTRIPMAP_PKEY = properties.getProperty("opentripmap_pkey");
 
     private final HttpClient client = HttpClient.newHttpClient();
 
@@ -57,12 +70,26 @@ public class APIWorker {
     }
 
 
-    public Location getUserChooseLocation(List<Location> locationsList) throws NullPointerException, LocationNotFoundException {
+    private String buildOpenTripMapRadiusURI(BigDecimal lat, BigDecimal lng) {
+        String strLng = lng.setScale(2, RoundingMode.DOWN).toString();
+        String strLat = lat.setScale(2, RoundingMode.DOWN).toString();
+        return "http://api.opentripmap.com/0.1/ru/places/radius?radius=" + RADIUS + "&lon=" + strLng + "&lat=" + strLat +
+                "&format=json" + "&apikey=" + OPENTRIPMAP_PKEY;
+    }
+
+    private String buildOpenTripMapXidURI(String xid) {
+
+        return "http://api.opentripmap.com/0.1/ru/places/xid/" + xid + "?" +
+                "&format=json" + "&apikey=" + OPENTRIPMAP_PKEY;
+    }
+
+
+    private Location getUserChooseLocation(List<Location> locationsList) throws NullPointerException, LocationNotFoundException {
         if (locationsList == null) {
             throw new NullPointerException("empty locations list");
         }
 
-        if(locationsList.size() == 0){
+        if (locationsList.size() == 0) {
             throw new LocationNotFoundException();
         }
 
@@ -128,6 +155,31 @@ public class APIWorker {
         }
     }
 
+    private List<Place> getInterestingPlacesAround(Location location) {
+
+        String strURI = buildOpenTripMapRadiusURI(location.lat(), location.lng());
+
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(new URI(strURI))
+                    .GET().build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (isOk(response.statusCode())) {
+
+                String jsonStr = response.body();
+                return JSONParser.getPlaces(jsonStr);
+            } else {
+                throw new IncorrectResponseException(response.statusCode());
+            }
+
+
+        } catch (IOException | InterruptedException | URISyntaxException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+    }
+
 
     private void showWeather(Location location) {
         String strURI = buildOpenWeatherURI(location.lat(), location.lng());
@@ -153,6 +205,43 @@ public class APIWorker {
         }
     }
 
+    private void setPlacesDescriptions(List<Place> places) {
+        if (places.size() == 0) {
+            System.out.println("no interesting places around, sad");
+            return;
+        }
+        for (int i = 0; i < places.size(); i++) {
+            Place place = places.get(i);
+            String strURI = buildOpenTripMapXidURI(place.getXid());
+            try {
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(new URI(strURI))
+                        .GET().build();
+
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+                if (isOk(response.statusCode())) {
+
+                    String jsonStr = response.body();
+                    JSONParser.setPlaceDescription(place, jsonStr);
+
+                } else {
+                    throw new IncorrectResponseException(response.statusCode());
+                }
+
+            } catch (URISyntaxException | InterruptedException | IOException e) {
+                e.printStackTrace();
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+
+    private void showPlacesData(List<Place> places) {
+        for (Place place : places) {
+            place.printPlaceData(out);
+        }
+    }
 
     public void start() throws ExecutionException, InterruptedException {
         Scanner consoleReader = new Scanner(in);
@@ -162,6 +251,36 @@ public class APIWorker {
 
         CompletableFuture<Location> future = CompletableFuture.supplyAsync(() -> findLocation(locationName));
 
-        showWeather(future.get());
+        ExecutorService executorService = Executors.newCachedThreadPool();
+
+        executorService.execute(() -> {
+            try {
+                showWeather(future.get());
+            } catch (InterruptedException | ExecutionException e) {
+                e.printStackTrace();
+                throw new RuntimeException(e);
+            }
+        });
+
+
+        executorService.execute(() -> {
+            List<Place> places = null;
+            try {
+                places = getInterestingPlacesAround(future.get());
+            } catch (InterruptedException | ExecutionException e) {
+                e.printStackTrace();
+                throw new RuntimeException(e);
+            }
+            setPlacesDescriptions(places);
+            showPlacesData(places);
+        });
+
+        try {//waiting for tasks to complete
+            executorService.shutdown();
+            executorService.awaitTermination(5L, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
     }
 }

@@ -1,4 +1,4 @@
-package ru.nsu.fit.tsibin.Exceptions;
+package ru.nsu.fit.tsibin.exceptions;
 
 public class LocationNotFoundException extends Exception{
 
