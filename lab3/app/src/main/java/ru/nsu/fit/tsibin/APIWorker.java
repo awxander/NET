@@ -262,7 +262,6 @@ public class APIWorker {
             }
         });
 
-
         executorService.execute(() -> {
             List<Place> places = null;
             try {
